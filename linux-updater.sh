@@ -108,7 +108,11 @@ pkg_pending() {
         # -s is a simulation: every pending package shows as an "Inst" line.
         apt-get) apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true ;;
         # check-update exits 100 when updates exist, so tolerate non-zero.
-        dnf|yum) { "$PKG_MGR" -q check-update 2>/dev/null || true; } | grep -cE '^[a-zA-Z0-9]' || true ;;
+        # Run as root against the cache pkg_refresh just built: as a normal
+        # user dnf5 uses a per-user cache and can stop at a hidden GPG key
+        # prompt. Only count "name.arch version repo" rows, not dnf5's
+        # "Upgrades" header.
+        dnf|yum) { $SUDO "$PKG_MGR" -q check-update </dev/null 2>/dev/null || true; } | awk 'NF>=3 && $1 ~ /\./' | grep -c . || true ;;
         pacman)  if command -v checkupdates &>/dev/null; then checkupdates 2>/dev/null | grep -c . || true
                  else pacman -Qu 2>/dev/null | grep -c . || true; fi ;;
         zypper)  zypper --quiet list-updates 2>/dev/null | grep -c '^v ' || true ;;
@@ -120,7 +124,7 @@ pkg_pending() {
 pkg_list_pending() {
     case "$PKG_MGR" in
         apt-get) apt-get -s upgrade 2>/dev/null | awk '/^Inst /{print $2}' ;;
-        dnf|yum) { "$PKG_MGR" -q check-update 2>/dev/null || true; } | awk '/^[a-zA-Z0-9]/{print $1}' ;;
+        dnf|yum) { $SUDO "$PKG_MGR" -q check-update </dev/null 2>/dev/null || true; } | awk 'NF>=3 && $1 ~ /\./{print $1}' ;;
         pacman)  if command -v checkupdates &>/dev/null; then checkupdates 2>/dev/null; else pacman -Qu 2>/dev/null; fi ;;
         zypper)  zypper --quiet list-updates 2>/dev/null | awk -F'|' '/^v /{gsub(/ /,"",$3); print $3}' ;;
         apk)     apk list -u 2>/dev/null | awk '{print $1}' ;;
